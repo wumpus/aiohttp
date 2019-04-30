@@ -113,6 +113,26 @@ async def noop2(*args: Any, **kwargs: Any) -> None:
 coroutines._DEBUG = old_debug  # type: ignore
 
 
+class FakeRequestsPreparedRequest(object):
+    """Helper for RequestsExtensionAuth"""
+    def __init__(self, headers, method, url, body):
+        self.headers = headers
+        self.method = method
+        self.url = url
+        self.body = body
+
+
+class RequestsExtensionAuth(object):
+    """Helper that processes auth similar to requests module auth extensions"""
+
+    def __init__(self, obj):
+        self.obj = obj
+
+    def auth(self, req):
+        fake = FakeRequestsPreparedRequest(req.headers, req.method, str(req.url), req.body)
+        self.obj(fake)
+
+
 class BasicAuth(namedtuple('BasicAuth', ['login', 'password', 'encoding'])):
     """Http basic authentication helper."""
 

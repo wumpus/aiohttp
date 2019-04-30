@@ -40,6 +40,7 @@ from .formdata import FormData
 from .helpers import (  # noqa
     PY_36,
     BaseTimerContext,
+    RequestsExtensionAuth,
     BasicAuth,
     HeadersMixin,
     TimerNoop,
@@ -236,7 +237,7 @@ class ClientRequest:
                  skip_auto_headers: Iterable[str]=frozenset(),
                  data: Any=None,
                  cookies: Optional[LooseCookies]=None,
-                 auth: Optional[BasicAuth]=None,
+                 auth: Union[BasicAuth, RequestsExtensionAuth, None]=None,
                  version: http.HttpVersion=http.HttpVersion11,
                  compress: Optional[str]=None,
                  chunked: Optional[bool]=None,
@@ -288,13 +289,13 @@ class ClientRequest:
         self.update_auto_headers(skip_auto_headers)
         self.update_cookies(cookies)
         self.update_content_encoding(data)
-        self.update_auth(auth)
         self.update_proxy(proxy, proxy_auth, proxy_headers)
 
         self.update_body_from_data(data)
         if data or self.method not in self.GET_METHODS:
             self.update_transfer_encoding()
         self.update_expect_continue(expect100)
+        self.update_auth(auth)
         if traces is None:
             traces = []
         self._traces = traces
@@ -458,17 +459,22 @@ class ClientRequest:
             if hdrs.CONTENT_LENGTH not in self.headers:
                 self.headers[hdrs.CONTENT_LENGTH] = str(len(self.body))
 
-    def update_auth(self, auth: Optional[BasicAuth]) -> None:
+    def update_auth(self, auth: Union[BasicAuth, RequestsExtensionAuth, None]) -> None:
         """Set basic auth."""
         if auth is None:
             auth = self.auth
         if auth is None:
             return
 
-        if not isinstance(auth, helpers.BasicAuth):
-            raise TypeError('BasicAuth() tuple is required instead')
+        if isinstance(auth, BasicAuth):
+            self.headers[hdrs.AUTHORIZATION] = auth.encode()
+            return
 
-        self.headers[hdrs.AUTHORIZATION] = auth.encode()
+        if isinstance(auth, RequestsExtensionAuth):
+            auth.auth(self)
+            return
+
+        raise TypeError('Invalid auth keyword argument specified')
 
     def update_body_from_data(self, body: Any) -> None:
         if not body:
